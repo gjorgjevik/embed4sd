@@ -1,6 +1,6 @@
-# Embed4SD: Enhancing Sustainable Development Progress Monitoring Through Natural Language Processing
+# Embed4SD: Associating Indicators with Sustainable Development Goals and Targets Through Textual Descriptions
 
-This repository contains the code for the research article "Embed4SD: Enhancing Sustainable Development Progress Monitoring Through Natural Language Processing", authored by A. Gjorgjevikj, K. Mishev, D. Trajanov, and Lj. Kocarev.
+This repository contains the code for the research article "Embed4SD: Associating Indicators with Sustainable Development Goals and Targets Through Textual Descriptions", authored by A. Gjorgjevikj, K. Mishev, D. Trajanov, and Lj. Kocarev.
 
 ## Requirements
 
