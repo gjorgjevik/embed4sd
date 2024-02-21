@@ -2,7 +2,7 @@ import os
 import csv
 import re
 
-from embed4sd.extractors import FineTuningDataExtractor, IndicatorTestDataExtractor, GoalTestDataExtractor
+from embed4sd.extractors import FineTuningDataExtractor, IndicatorTestDataExtractor, GoalTestDataExtractor, ExternalIndicatorTestDataExtractor
 from embed4sd.encoders import Encoder, CustomEncoderOne, CustomEncoderTwo, CustomEncoderThree
 from embed4sd.tasks import Task, IndicatorToMultipleGoalsClassificationTask, GoalToMultipleGoalsClassificationTask, \
     MultiClassClassificationTask
@@ -46,6 +46,25 @@ class TestTaskFactory:
         else:
             raise ValueError(f'Invalid task name: {test_task}.')
 
+
+class TestDatasetFactory:
+    @staticmethod
+    def get_extractor(test_dataset: str, test_task: str, concatenation_option: int) -> TestDataExtractor:
+        if (test_datset == 'IND-TITLE-AGENDA' and test_task in ['MC-IND-SDG', 'MC-IND-TRG', 'ML-IND-SDG']):
+            return IndicatorTestDataExtractor(test_task, concatenation_option)
+        elif (test_datset == 'SDG-TITLE-WIKI' and test_task == 'ML-IND-SDG'):
+            return GoalTestDataExtractor(test_task, concatenation_option)
+        elif (test_datset == 'IND-DESCR-EUSDG' and test_task in ['MC-IND-SDG', 'ML-IND-SDG']):
+            return ExternalIndicatorTestDataExtractor(test_task, concatenation_option)
+        elif (test_datset == 'IND-DESCR-WDISDG' and test_task in ['MC-IND-SDG', 'MC-IND-TRG']):
+            return ExternalIndicatorTestDataExtractor(test_task, concatenation_option)
+        elif (test_datset == 'IND-DESCR-URBAN' and test_task in ['MC-IND-SDG', 'MC-IND-TRG', 'ML-IND-SDG']):
+            return ExtrnalIndicatorTestDataExtractor(test_task, concatenation_option)
+        elif (test_datset == 'IND-DESCR-REGIONS' and test_task in ['MC-IND-SDG', 'MC-IND-TRG']):
+            return ExternalIndicatorTestDataExtractor(test_task, concatenation_option)
+        else:
+            raise ValueError(f'Invalid dataset and task combination: {test_datset} / {test_task}.')
+            
 
 class Utilities:
     @staticmethod
@@ -138,7 +157,7 @@ class Evaluator:
                         test_embeddings, test_labels, test_labels_multiple,
                         encoder, checkpoint_number, random_seed)
 
-    def run(self, input_files, flags, test_input_file,
+    def run(self, input_files, flags, test_input_file, test_datset, concatenation_option,
             encoder, base_model_directory, checkpoint_directory, checkpoint_number,
             test_task, k, random_seed, result_directory):
         self._validate(test_task, k)
@@ -153,11 +172,8 @@ class Evaluator:
 
         training_extractor = FineTuningDataExtractor(input_files=input_files, flags=flags)
 
-        if test_task != 'ML-SDG-SDG':
-            test_extractor = IndicatorTestDataExtractor(input_file=test_input_file)
-        else:
-            test_extractor = GoalTestDataExtractor(input_file=test_input_file)
-        validation_set, test_set = test_extractor.run()
+        test_extractor = TestDatasetFactory.get_extractor(test_datset, test_task, concatenation_option)
+        validation_set, test_set = test_extractor.run(input_file=test_input_file)
 
         training_set = training_extractor.run(goal_count=g, target_count=t)
         training_embeddings = self._embed(encoder, base_model_directory,
@@ -169,7 +185,7 @@ class Evaluator:
                                       checkpoint_directory, checkpoint_number,
                                       test_set['text'].values.tolist())
 
-        if test_task.startswith('MC'):
+        if test_task.startswith('MC') and validation_set is not None:
             validation_embeddings = self._embed(encoder, base_model_directory,
                                                 checkpoint_directory, checkpoint_number,
                                                 validation_set['text'].values.tolist())
@@ -180,6 +196,12 @@ class Evaluator:
             test_labels_multiple_ = test_set[test_set[test_label_column] != '']['repeats'].apply(
                 lambda x: self._multiple_labels(x, test_task))
 
+        elif test_task.startswith('MC') and validation_set is None:
+            validation_embeddings_, validation_labels_ = None, None
+            validation_labels_multiple_, test_labels_multiple_ = None, None
+            test_labels_multiple_ = test_set['repeats'].apply(
+                lambda x: self._multiple_labels(x, test_task))
+            
         else:
             validation_embeddings_, validation_labels_ = None, None
             validation_labels_multiple_, test_labels_multiple_ = None, None
@@ -208,6 +230,8 @@ if __name__ == '__main__':
         flags=[True,  # flag indicating that the first file contains a revision of the general Wikipedia article
                False],  # flag indicating that the second file contains revisions of SDG-specific Wikipedia articles
         test_input_file=r'path\to\indicator\or\goal\csv\file',  # CSV file containing the necessary indicator/Goal data
+        test_dataset='IND-TITLE-AGENDA',  # test datset name, see TestDatasetFactory
+        concatenation_option=0,
         encoder='SBERT-MINILM-L6',  # encoder name, see EncoderFactory.ENCODER_DIMENSION dictionary
         base_model_directory=r'path\to\model\files',  # directory containing the pre-trained model files
         checkpoint_directory=r'path\to\checkpoint\file',  # directory containing the checkpoint file (for fine-tuned models)
