@@ -164,8 +164,9 @@ class FineTuningDataExtractor:
 class TestDataExtractor(ABC):
     RANDOM_SEED = 42
 
-    def __init__(self, input_file: str):
-        self.input_file = input_file
+    def __init__(self, test_task: str, concatenation_option: int):
+        self.test_task = test_task
+        self.concatenation_option = concatenation_option
         seed(self.RANDOM_SEED)
 
     @staticmethod
@@ -193,15 +194,15 @@ class TestDataExtractor(ABC):
             return str(result.group(1))
 
     @abstractmethod
-    def prepare(self) -> DataFrame:
+    def prepare(self, input_file: str) -> DataFrame:
         raise NotImplementedError()
 
     @abstractmethod
     def extract(self, data: DataFrame) -> [DataFrame, DataFrame]:
         raise NotImplementedError()
 
-    def run(self) -> DataFrame:
-        data = self.prepare()
+    def run(self, input_file: str) -> DataFrame:
+        data = self.prepare(input_file)
         data = self.extract(data)
         return data
 
@@ -217,8 +218,8 @@ class IndicatorTestDataExtractor(TestDataExtractor):
     INDICATOR_FILE_COLUMNS = ['id', 'repeats', 'text']  # column 'text' refers to the indicator title
     INDICATOR_OUTPUT_COLUMNS = ['id', 'repeats', 'goal', 'target', 'text']
 
-    def prepare(self) -> DataFrame:
-        data = read_csv(self.input_file, sep=',', encoding='utf-8', dtype=str).fillna('')
+    def prepare(self, input_file: str) -> DataFrame:
+        data = read_csv(input_file, sep=',', encoding='utf-8', dtype=str).fillna('')
         assert data.columns.tolist().__eq__(self.INDICATOR_FILE_COLUMNS)
 
         data = data[data['text'] != '']
@@ -269,8 +270,8 @@ class GoalTestDataExtractor(TestDataExtractor):
     GOAL_FILE_COLUMNS = ['id', 'links', 'text']  # column 'text' refers to the Goal title
     GOAL_OUTPUT_COLUMNS = ['id', 'links', 'goal', 'text']
 
-    def prepare(self):
-        data = read_csv(self.input_file, sep=',', encoding='utf-8', dtype=str).fillna('')
+    def prepare(self, input_file: str):
+        data = read_csv(input_file, sep=',', encoding='utf-8', dtype=str).fillna('')
         assert data.columns.tolist().__eq__(self.GOAL_FILE_COLUMNS)
         assert data.shape[0] == 16
 
@@ -279,4 +280,88 @@ class GoalTestDataExtractor(TestDataExtractor):
 
     def extract(self, data):
         test_set = data[self.GOAL_OUTPUT_COLUMNS]
+        return None, test_set
+
+
+class ExternalIndicatorTestDataExtractor(TestDataExtractor):
+    INDICATOR_FILE_COLUMNS = ['id', 'name', 'definition', 'goal', 'target']
+    INDICATOR_OUTPUT_COLUMNS = ['id', 'repeats', 'goal', 'target', 'text']
+
+    min_length = 20
+    max_length = 40
+    max_std = 15
+
+    def __init__(self, test_task: str, concatenation_option: int):
+        super().__init__(test_task, concatenation_option)
+        
+        self.splitter = TextSplitter(min_length=self.min_length, 
+                                     max_length=self.max_length, 
+                                     max_std = self.max_std)
+
+    @staticmethod
+    def _correct_label_column(labels: str) -> str:
+        repeats_list = [str(i.strip()) for i in labels.split(',')]
+        return str(repeats_list[0])
+
+    @staticmethod
+    def _correct_repeats_column(labels: str) -> str:
+        repeats_list = [str(i.strip()) for i in labels.split(',')]
+
+        if len(repeats_list) > 1:
+            repeats = ','.join([str(i) for i in repeats_list])
+        else:
+            repeats = ''
+        return repeats
+
+    @staticmethod
+    def _correct_text(text: str) -> str:
+        return re.sub(r'\s+', ' ', text.strip())
+
+    @staticmethod
+    def _correct_definition(name: str, definition: str) -> str:
+        if not definition:
+            definition = name
+        return definition + ('' if name.endswith('.') else '.')
+
+    @staticmethod
+    def _concat_text(name: str, definition: str) -> str:
+        text = (name + (' ' if name.endswith('.') else '. ') + 
+                (definition + ('' if definition.endswith('.') else '.') if definition else ''))
+        return text
+
+    @staticmethod
+    def _split_text(text: str) -> str:
+        parts = self.splitter.split_to_parts([text])
+        text_new = self.splitter.concatenate_parts_simple(parts)
+        return text_new
+
+    def prepare(self, input_file: str) -> DataFrame:
+        data = read_csv(input_file, sep=',', encoding='utf-8', dtype=str, 
+                        usecols=self.INDICATOR_FILE_COLUMNS).fillna('')
+        assert data.columns.tolist().__eq__(self.INDICATOR_FILE_COLUMNS)
+
+        data['id'] = data['id']
+        if 'SDG' in self.test_task:
+            data['repeats'] = data['goal'].apply(lambda x: self._correct_repeats_column(x))
+        else:
+            data['repeats'] = data['target'].apply(lambda x: self._correct_repeats_column(x))
+        data['goal'] = data['goal'].apply(lambda x: self._correct_label_column(x))
+        data['target'] = data['target'].apply(lambda x: self._correct_label_column(x))
+
+        if self.concatenation_option == 0:  # name
+            data['text'] = data['name'].apply(lambda x: self._correct_text(x))
+        elif self.concatenation_option == 1:  # definition
+            data['text'] = data[['name', 'definition']].apply(
+                lambda x: self._split_text(self._correct_definition(
+                    self._correct_text(x[0]), self._correct_text(x[1]))), axis=1)
+        else:  # name and definition
+            data['text'] = data[['name', 'definition']].apply(
+                lambda x: self._concat_text(
+                    self._correct_text(x[0]), 
+                    self._split_text(self._correct_text(x[1]))), axis=1)
+        
+        return data
+
+    def extract(self, data: DataFrame) -> [DataFrame, DataFrame]:
+        test_set = data[self.INDICATOR_OUTPUT_COLUMNS)
         return None, test_set
