@@ -1,6 +1,6 @@
-# Embed4SD: Associating Indicators with Sustainable Development Goals and Targets Through Textual Descriptions
+# Benchmarking Sentence Encoders in Associating Indicators with Sustainable Development Goals and Targets
 
-This repository contains the code for the research article "Embed4SD: Associating Indicators with Sustainable Development Goals and Targets Through Textual Descriptions", authored by A. Gjorgjevikj, K. Mishev, D. Trajanov, and Lj. Kocarev.
+This repository contains the code for the research article "Benchmarking Sentence Encoders in Associating Indicators with Sustainable Development Goals and Targets", authored by A. Gjorgjevikj, K. Mishev, D. Trajanov, and Lj. Kocarev.
 
 ## Requirements
 
